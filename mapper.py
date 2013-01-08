@@ -43,7 +43,7 @@ class NewPointDialog(QtGui.QDialog):
 			QMessageBox.warning(self, "Error", "Point name field must not be empty")
 			return
 		
-		self.parent.addPoint(newPointName, newPointLat, newPointLon, newPointColor)
+		self.parent.addPoint(Point(newPointName, newPointLat, newPointLon, newPointColor))
 		self.parent.drawMapOnCanvas()
 		self.parent.updatePointsList()
 		
@@ -51,6 +51,7 @@ class NewPointDialog(QtGui.QDialog):
 	
 	def cancel(self):
 		self.close()
+
 
 class QScene(QtGui.QGraphicsScene):
 
@@ -62,7 +63,66 @@ class QScene(QtGui.QGraphicsScene):
 		
 	def mouseDoubleClickEvent(self, ev):
 		self.parent.doubleClickOnGraphics(ev)
+
+
+class Track():
+	
+	__pointsList = []
+	__name = ""
+	
+	def __init__(self, name):
+		self.__name = name
+		self.__pointsList = []
+	
+	def addPoint(self, point):
+		self.__pointsList.append(point)
+	
+	def points(self):
+		return self.__pointsList
+	
+	def name(self):
+		return self.__name
+	
+	def __str__(self):
 		
+		ritorno = ""
+		
+		ritorno = ritorno + "Track name: %s\n"%self.__name
+		for point in self.__pointsList:
+			ritorno = ritorno + "- " + point.__str__() + "\n"
+		
+		return ritorno
+
+
+class Point():
+
+	__pointID = ""
+	__lat = 0
+	__lon = 0
+	__color = "black"
+	
+	def __init__(self, name, lat, lon, color):
+		self.__pointID = name
+		self.__lat = lat
+		self.__lon = lon
+		self.__color = color
+	
+	def name(self):
+		return self.__pointID
+	
+	def lat(self):
+		return self.__lat
+	
+	def lon(self):
+		return self.__lon
+	
+	def color(self):
+		return self.__color
+	
+	def __str__(self):
+		return "%s: %.3f %.3f"%(self.__pointID, self.__lat, self.__lon)
+
+
 class Mapper(QtGui.QMainWindow):
 	
 	# working map objects by createMap
@@ -92,7 +152,10 @@ class Mapper(QtGui.QMainWindow):
 	
 	# points database
 	points = []
+	tracks = []
 
+	# Converts a gps coordinate couple into the xy coordinate of
+	# the OSM tile it is on.
 	def deg2num(self, lat_deg, lon_deg, zoom):
 		lat_rad = math.radians(lat_deg)
 		n = 2.0 ** zoom
@@ -100,6 +163,7 @@ class Mapper(QtGui.QMainWindow):
 		ytile = float((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
 		return (xtile, ytile)
 
+	# Calculates the NW gps coordinate of an xy OSM tile
 	def num2deg(self, xtile, ytile, zoom):
 		n = 2.0 ** zoom
 		lon_deg = xtile / n * 360.0 - 180.0
@@ -107,15 +171,41 @@ class Mapper(QtGui.QMainWindow):
 		lat_deg = math.degrees(lat_rad)
 		return (lat_deg, lon_deg)
 
+	# Calculates the position in pixel on the current drawn map
+	# of the passed coordinates
+	def gpsToXY(self, lat, lon):
+		
+		xPos, yPos = self.deg2num(lat, lon, self.actualZoom)
+		
+		tileWidth = tileHeight = 256.0
+		dotX = (xPos - float(self.upperLeftX))*tileWidth
+		dotY = (yPos - float(self.upperLeftY))*tileHeight
+
+		return dotX, dotY
+	
+	# Calculates the gps coordinates of the pixel xy in the 
+	# currently drawn map
+	def xyToGps(self, x, y):
+		xPos = x / 256.0 + self.upperLeftX
+		yPos = y / 256.0 + self.upperLeftY
+		
+		lat, lon = self.num2deg(xPos, yPos, self.actualZoom)
+		
+		return lat, lon
+
+	# Returns the OSM tile containing the passed gps
+	# coordinate
 	def getTile(self, lat, lon, zoom, xshift=0, yshift=0):
 
 		(x, y) = self.deg2num(lat, lon, zoom)
 		
 		return self.getTileXY(x, y, zoom, xshift, yshift)
 	
+	# Returns the OSM tile indicated by the xy coordinates
+	# - if the tile was already cached on disk, serve the cached copy
+	# - if the tile was not cached, download it
+	# - if can't download, return a black square
 	def getTileXY(self, x, y, zoom, xshift=0, yshift=0):
-	
-		#print "Getting tile x: %i, y: %i, zoom: %i"%(x,y,zoom)
 	
 		imUrl = "http://tile.openstreetmap.org/%i/%i/%i.png"%(zoom, x+xshift, y+yshift)
 
@@ -150,45 +240,26 @@ class Mapper(QtGui.QMainWindow):
 		
 		return PIL.Image.open(imRead)
 		
-	def gpsToXY(self, lat, lon):
-		
-		xPos, yPos = self.deg2num(lat, lon, self.actualZoom)
-		#print "xPos: %.2f, yPos: %.2f"%(xPos, yPos)
-		
-		#print "upperLeftX = %.2f"%(self.upperLeftX)
-		
-		tileWidth = tileHeight = 256.0
-		dotX = (xPos - float(self.upperLeftX))*tileWidth
-		dotY = (yPos - float(self.upperLeftY))*tileHeight
-		
-		#print "DotX = %.2f, dotY = %.2f"%(dotX, dotY)
-		
-		return dotX, dotY
-		
-	def xyToGps(self, x, y):
-		xPos = x / 256.0 + self.upperLeftX
-		yPos = y / 256.0 + self.upperLeftY
-		
-		lat, lon = self.num2deg(xPos, yPos, self.actualZoom)
-		
-		return lat, lon
 
 	def __init__(self, parent=None):
 		QtGui.QMainWindow.__init__(self, parent)
 		self.ui = Ui_MainWindow()
 		self.ui.setupUi(self)
 		
+		# managing upper right UI section (map initialization parameters)
 		QtCore.QObject.connect(self.ui.button_rebuild, QtCore.SIGNAL("clicked()"), self.createMapButton)
 		QtCore.QObject.connect(self.ui.button_center, QtCore.SIGNAL("clicked()"), self.center)
+		
+		# manage points list
 		QtCore.QObject.connect(self.ui.button_delete_point, QtCore.SIGNAL("clicked()"), self.deleteSelectedPoint)
+		QtCore.QObject.connect(self.ui.button_new_point, QtCore.SIGNAL("clicked()"), self.openNewPointWindow)
 		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemSelectionChanged()"), self.centerOnSelectedPoint)		
 		
+		# manage zoom buttons
 		QtCore.QObject.connect(self.ui.map_zoom_down, QtCore.SIGNAL("clicked()"), self.zoomDown)
 		QtCore.QObject.connect(self.ui.map_zoom_up, QtCore.SIGNAL("clicked()"), self.zoomUp)
 		
 		QtCore.QObject.connect(self, QtCore.SIGNAL("centerUI()"), self.center)
-		
-		QtCore.QObject.connect(self.ui.button_new_point, QtCore.SIGNAL("clicked()"), self.openNewPointWindow)
 		
 		self.createMapButton()
 	
@@ -200,17 +271,15 @@ class Mapper(QtGui.QMainWindow):
 		if (self.ui.mapZoom.value() > 1):
 			self.ui.mapZoom.setValue(self.ui.mapZoom.value()-1)
 			self.createMapButton()
-			
+	
+	# performed when a point is doubleclicked in the map
+	# sets the point coordinates in the upper right fields in the ui, 
+	# and rebuilds the map
 	def doubleClickOnGraphics(self, event):
 		
 		newX = event.scenePos().x()
 		newY = event.scenePos().y()
-	
-		#print "x: %i, y: %i"%(newX, newY)
-		
 		lat, lon = self.xyToGps(newX, newY)
-		
-		#print "new lat: %.6f, new lon: %.6f"%(lat, lon)
 		
 		self.ui.mapLat.setValue(lat)
 		self.ui.mapLon.setValue(lon)
@@ -229,7 +298,17 @@ class Mapper(QtGui.QMainWindow):
 		# delete previous "_center_" marker
 		self.deletePointByID("_center_")
 		# draw "_center_" position
-		self.addPoint("_center_", lat, lon, 'red')
+		self.addPoint(Point("_center_", lat, lon, 'red'))
+		
+		print len(self.tracks)
+		
+		track = Track("prova")
+		track.addPoint(Point("one", 42.355900, 10.930400, "red"))
+		track.addPoint(Point("two", 42.355800, 10.930700, "red"))
+		track.addPoint(Point("three", 42.355600, 10.920400, "red"))
+		self.tracks.append(track)
+		
+		print len(self.tracks)
 		
 		self.drawMapOnCanvas()
 		self.updatePointsList()
@@ -246,10 +325,11 @@ class Mapper(QtGui.QMainWindow):
 		currentSelectedPoint = self.ui.pointsList.currentItem()
 		
 		if (currentSelectedPoint):
-			pointLat = float(currentSelectedPoint.text(1))		
-			pointLon = float(currentSelectedPoint.text(2))		
-			
-			self.centerCoords(pointLat, pointLon)
+			if (currentSelectedPoint.childCount() == 0):
+				pointLat = float(currentSelectedPoint.text(1))		
+				pointLon = float(currentSelectedPoint.text(2))		
+				
+				self.centerCoords(pointLat, pointLon)
 			
 	def deleteSelectedPoint(self):
 		currentSelectedPoint = self.ui.pointsList.currentItem()
@@ -258,7 +338,7 @@ class Mapper(QtGui.QMainWindow):
 			
 			remainingPoints = []
 			for point in self.points:
-				if (point[0] != pointID):
+				if (point.name() != pointID):
 					remainingPoints.append(point)
 			
 			self.points = remainingPoints
@@ -280,13 +360,32 @@ class Mapper(QtGui.QMainWindow):
 		self.clear()
 		
 		for point in self.points:
-			dotX, dotY = self.gpsToXY(point[1], point[2])
+			dotX, dotY = self.gpsToXY(point.lat(), point.lon())
 			rectWidth = 3
 			
 			self.draw.ellipse(
 				[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
-				fill=point[3]
-			)			
+				fill=point.color()
+			)
+
+		for track in self.tracks:
+		
+			coordVector = []
+			
+			for point in track.points():
+				dotX, dotY = self.gpsToXY(point.lat(), point.lon())
+				rectWidth = 3
+				
+				self.draw.ellipse(
+					[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
+					fill=point.color()
+				)
+				
+				coordVector.append(dotX)
+				coordVector.append(dotY)
+			
+			self.draw.line(coordVector, fill="black")
+
 
 		# draw image geometrical center
 		# self.draw.ellipse([self.imgWidth/2-3, self.imgHeight/2-3, self.imgWidth/2+3, self.imgHeight/2+3], fill="green")
@@ -300,19 +399,32 @@ class Mapper(QtGui.QMainWindow):
 
 		for point in self.points:
 		
-			pointID = point[0]
-			pointLat = point[1]
-			pointLon = point[2]
-			pointFill = point[3]
-		
  			newElement = QtGui.QTreeWidgetItem(None)
-			newElement.setText(0, pointID)
-			newElement.setText(1, "%.8f"%pointLat)
-			newElement.setText(2, "%.8f"%pointLon)
+			newElement.setText(0, point.name())
+			newElement.setText(1, "%.8f"%point.lat())
+			newElement.setText(2, "%.8f"%point.lon())
 			self.ui.pointsList.addTopLevelItem(newElement)
 			if (first == True):	
 				firstElement = newElement
 				first = False
+		
+		for track in self.tracks:
+			
+			print track
+			
+			trackName = track.name()
+			trackNode = QtGui.QTreeWidgetItem(None)
+			trackNode.setText(0, trackName)
+			self.ui.pointsList.addTopLevelItem(trackNode)
+			
+			for point in track.points():
+			
+				newElement = QtGui.QTreeWidgetItem(trackNode)
+				newElement.setText(0, point.name())
+				newElement.setText(1, "%.8f"%point.lat())
+				newElement.setText(2, "%.8f"%point.lon())
+				
+				self.ui.pointsList.addTopLevelItem(newElement)				
 		
 		if (firstElement):
 			self.ui.pointsList.setCurrentItem(firstElement)	
@@ -407,16 +519,15 @@ class Mapper(QtGui.QMainWindow):
 		self.newPointWindow = NewPointDialog(self)
 		self.newPointWindow.exec_()
 
-	def addPoint(self, id, lat, lon, fillcolor=None):
-		
-		self.points.append([id, lat, lon, fillcolor])
+	def addPoint(self, point):		
+		self.points.append(point)
 	
 	def deletePointByID(self, id):
 		
 		survivingPoints = []
 		
 		for point in self.points:
-			if (point[0] != id):
+			if (point.name() != id):
 				survivingPoints.append(point)
 
 		self.points = survivingPoints
