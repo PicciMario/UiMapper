@@ -69,13 +69,17 @@ class Track():
 	
 	__pointsList = []
 	__name = ""
+	__visible = True
 	
 	def __init__(self, name):
 		self.__name = name
 		self.__pointsList = []
 	
 	def addPoint(self, point):
-		self.__pointsList.append(point)
+		if (self.getPointByID(point.name())):
+			print "Point name already in use"
+		else:
+			self.__pointsList.append(point)
 	
 	def points(self):
 		return self.__pointsList
@@ -92,7 +96,21 @@ class Track():
 			ritorno = ritorno + "- " + point.__str__() + "\n"
 		
 		return ritorno
-
+		
+	def getPointByID(self, id):
+		for point in self.__pointsList:
+			if (point.name() == id):
+				return point
+		return None
+	
+	def visible(self):
+		return self.__visible
+	
+	def setVisible(self, value):
+		if (value == True):
+			self.__visible = True
+		else:
+			self.__visible = False
 
 class Point():
 
@@ -100,6 +118,8 @@ class Point():
 	__lat = 0
 	__lon = 0
 	__color = "black"
+	
+	__visible = True
 	
 	def __init__(self, name, lat, lon, color):
 		self.__pointID = name
@@ -121,6 +141,15 @@ class Point():
 	
 	def __str__(self):
 		return "%s: %.3f %.3f"%(self.__pointID, self.__lat, self.__lon)
+	
+	def visible(self):
+		return self.__visible
+	
+	def setVisible(self, value):
+		if (value == True):
+			self.__visible = True
+		else:
+			self.__visible = False
 
 
 class Mapper(QtGui.QMainWindow):
@@ -253,7 +282,13 @@ class Mapper(QtGui.QMainWindow):
 		# manage points list
 		QtCore.QObject.connect(self.ui.button_delete_point, QtCore.SIGNAL("clicked()"), self.deleteSelectedPoint)
 		QtCore.QObject.connect(self.ui.button_new_point, QtCore.SIGNAL("clicked()"), self.openNewPointWindow)
-		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemSelectionChanged()"), self.centerOnSelectedPoint)		
+		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemSelectionChanged()"), self.centerOnSelectedPoint)	
+		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemClicked(QTreeWidgetItem*,int)"), self.itemChangedOnPointsList)	
+
+		self.ui.pointsList.setColumnWidth(0, 100)
+		self.ui.pointsList.setColumnWidth(1, 80)
+		self.ui.pointsList.setColumnWidth(2, 80)
+		self.ui.pointsList.setColumnWidth(3, 30)
 		
 		# manage zoom buttons
 		QtCore.QObject.connect(self.ui.map_zoom_down, QtCore.SIGNAL("clicked()"), self.zoomDown)
@@ -262,6 +297,80 @@ class Mapper(QtGui.QMainWindow):
 		QtCore.QObject.connect(self, QtCore.SIGNAL("centerUI()"), self.center)
 		
 		self.createMapButton()
+
+
+	def itemChangedOnPointsList(self, item, column):
+		
+		# checks just status of column 3 (visible flag)
+		if (column != 3): return
+		
+		if (item):
+			nodeName = item.text(0)
+			
+			# not a track
+			if (item.childCount() == 0): 
+				
+				# a point belonging to a track
+				if (item.parent()):
+				
+					trackItem = item.parent()
+					trackName = trackItem.text(0)
+					
+					track = self.getTrackByID(trackName)
+					
+					if (track):
+						
+						point = track.getPointByID(nodeName)
+						
+						if (point):
+							
+							actualState = point.visible()
+							newState = item.checkState(3)
+							if (newState == Qt.Checked):
+								newState = True
+							else:
+								newState = False
+							
+							if (newState != actualState):
+								point.setVisible(newState)
+								self.drawMapOnCanvas()
+								self.updatePointsList()
+					
+				# a point not belonging to a track
+				else:
+					point = self.getPointByID(nodeName)
+					
+					if (point):
+						
+						actualState = point.visible()
+						newState = item.checkState(3)
+						if (newState == Qt.Checked):
+							newState = True
+						else:
+							newState = False
+						
+						if (newState != actualState):
+							point.setVisible(newState)
+							self.drawMapOnCanvas()
+							self.updatePointsList()
+			
+			# a track
+			else:	
+				track = self.getTrackByID(nodeName)
+				
+				if (track):
+
+						actualState = track.visible()
+						newState = item.checkState(3)
+						if (newState == Qt.Checked):
+							newState = True
+						else:
+							newState = False
+						
+						if (newState != actualState):
+							track.setVisible(newState)
+							self.drawMapOnCanvas()
+							self.updatePointsList()					
 	
 	def zoomDown(self):
 		if (self.ui.mapZoom.value() < 17):
@@ -306,7 +415,7 @@ class Mapper(QtGui.QMainWindow):
 		track.addPoint(Point("one", 42.355900, 10.930400, "red"))
 		track.addPoint(Point("two", 42.355800, 10.930700, "red"))
 		track.addPoint(Point("three", 42.355600, 10.920400, "red"))
-		self.tracks.append(track)
+		self.addTrack(track)
 		
 		print len(self.tracks)
 		
@@ -360,6 +469,9 @@ class Mapper(QtGui.QMainWindow):
 		self.clear()
 		
 		for point in self.points:
+		
+			if (point.visible() == False): continue
+		
 			dotX, dotY = self.gpsToXY(point.lat(), point.lon())
 			rectWidth = 3
 			
@@ -370,9 +482,14 @@ class Mapper(QtGui.QMainWindow):
 
 		for track in self.tracks:
 		
+			if (track.visible() == False): continue
+		
 			coordVector = []
 			
 			for point in track.points():
+				
+				if (point.visible() == False): continue
+			
 				dotX, dotY = self.gpsToXY(point.lat(), point.lon())
 				rectWidth = 3
 				
@@ -403,18 +520,29 @@ class Mapper(QtGui.QMainWindow):
 			newElement.setText(0, point.name())
 			newElement.setText(1, "%.8f"%point.lat())
 			newElement.setText(2, "%.8f"%point.lon())
+			
+			if (point.visible()):
+				newElement.setCheckState(3, Qt.Checked)
+			else:
+				newElement.setCheckState(3, Qt.Unchecked)
+			
 			self.ui.pointsList.addTopLevelItem(newElement)
+			
 			if (first == True):	
 				firstElement = newElement
 				first = False
 		
 		for track in self.tracks:
 			
-			print track
-			
 			trackName = track.name()
 			trackNode = QtGui.QTreeWidgetItem(None)
 			trackNode.setText(0, trackName)
+			
+			if (track.visible() == False):
+				trackNode.setCheckState(3, Qt.Unchecked)
+			else:
+				trackNode.setCheckState(3, Qt.Checked)
+			
 			self.ui.pointsList.addTopLevelItem(trackNode)
 			
 			for point in track.points():
@@ -423,6 +551,11 @@ class Mapper(QtGui.QMainWindow):
 				newElement.setText(0, point.name())
 				newElement.setText(1, "%.8f"%point.lat())
 				newElement.setText(2, "%.8f"%point.lon())
+
+				if (point.visible()):
+					newElement.setCheckState(3, Qt.Checked)
+				else:
+					newElement.setCheckState(3, Qt.Unchecked)
 				
 				self.ui.pointsList.addTopLevelItem(newElement)				
 		
@@ -519,8 +652,17 @@ class Mapper(QtGui.QMainWindow):
 		self.newPointWindow = NewPointDialog(self)
 		self.newPointWindow.exec_()
 
-	def addPoint(self, point):		
-		self.points.append(point)
+	def addPoint(self, point):
+		if (self.getPointByID(point.name())):
+			print "Point name already in use"
+		else:
+			self.points.append(point)
+
+	def addTrack(self, track):
+		if (self.getTrackByID(track.name())):
+			print "Track name already in use"
+		else:
+			self.tracks.append(track)
 	
 	def deletePointByID(self, id):
 		
@@ -531,8 +673,22 @@ class Mapper(QtGui.QMainWindow):
 				survivingPoints.append(point)
 
 		self.points = survivingPoints
+	
+	def getTrackByID(self, id):
 		
+		for track in self.tracks:
+			if (track.name() == id):
+				return track
+		
+		return None
 
+	def getPointByID(self, id):
+		
+		for point in self.points:
+			if (point.name() == id):
+				return point
+		
+		return None
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
