@@ -112,6 +112,7 @@ class Track():
 		else:
 			self.__visible = False
 
+
 class Point():
 
 	__pointID = ""
@@ -203,31 +204,24 @@ class Mapper(QtGui.QMainWindow):
 	# Calculates the position in pixel on the current drawn map
 	# of the passed coordinates
 	def gpsToXY(self, lat, lon):
-		
 		xPos, yPos = self.deg2num(lat, lon, self.actualZoom)
-		
 		tileWidth = tileHeight = 256.0
 		dotX = (xPos - float(self.upperLeftX))*tileWidth
 		dotY = (yPos - float(self.upperLeftY))*tileHeight
-
 		return dotX, dotY
 	
 	# Calculates the gps coordinates of the pixel xy in the 
 	# currently drawn map
 	def xyToGps(self, x, y):
 		xPos = x / 256.0 + self.upperLeftX
-		yPos = y / 256.0 + self.upperLeftY
-		
+		yPos = y / 256.0 + self.upperLeftY	
 		lat, lon = self.num2deg(xPos, yPos, self.actualZoom)
-		
 		return lat, lon
 
 	# Returns the OSM tile containing the passed gps
 	# coordinate
 	def getTile(self, lat, lon, zoom, xshift=0, yshift=0):
-
-		(x, y) = self.deg2num(lat, lon, zoom)
-		
+		(x, y) = self.deg2num(lat, lon, zoom)		
 		return self.getTileXY(x, y, zoom, xshift, yshift)
 	
 	# Returns the OSM tile indicated by the xy coordinates
@@ -235,7 +229,6 @@ class Mapper(QtGui.QMainWindow):
 	# - if the tile was not cached, download it
 	# - if can't download, return a black square
 	def getTileXY(self, x, y, zoom, xshift=0, yshift=0):
-	
 		imUrl = "http://tile.openstreetmap.org/%i/%i/%i.png"%(zoom, x+xshift, y+yshift)
 
 		fileName = "%i-%i-%i.png"%(zoom, x+xshift, y+yshift)
@@ -275,6 +268,9 @@ class Mapper(QtGui.QMainWindow):
 		self.ui = Ui_MainWindow()
 		self.ui.setupUi(self)
 		
+		self.points = []
+		self.tracks = []		
+		
 		# managing upper right UI section (map initialization parameters)
 		QtCore.QObject.connect(self.ui.button_rebuild, QtCore.SIGNAL("clicked()"), self.createMapButton)
 		QtCore.QObject.connect(self.ui.button_center, QtCore.SIGNAL("clicked()"), self.center)
@@ -296,108 +292,11 @@ class Mapper(QtGui.QMainWindow):
 		
 		QtCore.QObject.connect(self, QtCore.SIGNAL("centerUI()"), self.center)
 		
+		# triggers first map redraw (with default 
+		# position and zoom, as set by UI)
 		self.createMapButton()
 
-
-	def itemChangedOnPointsList(self, item, column):
-		
-		# checks just status of column 3 (visible flag)
-		if (column != 3): return
-		
-		if (item):
-			nodeName = item.text(0)
-			
-			# not a track
-			if (item.childCount() == 0): 
-				
-				# a point belonging to a track
-				if (item.parent()):
-				
-					trackItem = item.parent()
-					trackName = trackItem.text(0)
-					
-					track = self.getTrackByID(trackName)
-					
-					if (track):
-						
-						point = track.getPointByID(nodeName)
-						
-						if (point):
-							
-							actualState = point.visible()
-							newState = item.checkState(3)
-							if (newState == Qt.Checked):
-								newState = True
-							else:
-								newState = False
-							
-							if (newState != actualState):
-								point.setVisible(newState)
-								self.drawMapOnCanvas()
-								self.updatePointsList()
-					
-				# a point not belonging to a track
-				else:
-					point = self.getPointByID(nodeName)
-					
-					if (point):
-						
-						actualState = point.visible()
-						newState = item.checkState(3)
-						if (newState == Qt.Checked):
-							newState = True
-						else:
-							newState = False
-						
-						if (newState != actualState):
-							point.setVisible(newState)
-							self.drawMapOnCanvas()
-							self.updatePointsList()
-			
-			# a track
-			else:	
-				track = self.getTrackByID(nodeName)
-				
-				if (track):
-
-						actualState = track.visible()
-						newState = item.checkState(3)
-						if (newState == Qt.Checked):
-							newState = True
-						else:
-							newState = False
-						
-						if (newState != actualState):
-							track.setVisible(newState)
-							self.drawMapOnCanvas()
-							self.updatePointsList()					
-	
-	def zoomDown(self):
-		if (self.ui.mapZoom.value() < 17):
-			self.ui.mapZoom.setValue(self.ui.mapZoom.value()+1)
-			self.createMapButton()
-	def zoomUp(self):
-		if (self.ui.mapZoom.value() > 1):
-			self.ui.mapZoom.setValue(self.ui.mapZoom.value()-1)
-			self.createMapButton()
-	
-	# performed when a point is doubleclicked in the map
-	# sets the point coordinates in the upper right fields in the ui, 
-	# and rebuilds the map
-	def doubleClickOnGraphics(self, event):
-		
-		newX = event.scenePos().x()
-		newY = event.scenePos().y()
-		lat, lon = self.xyToGps(newX, newY)
-		
-		self.ui.mapLat.setValue(lat)
-		self.ui.mapLon.setValue(lon)
-		self.createMapButton()
-		
-		self.center()
-	
-	def createMapButton(self):
-		
+	def createMapButton(self):		
 		lat = self.ui.mapLat.value()
 		lon = self.ui.mapLon.value()
 		zoom = self.ui.mapZoom.value()
@@ -409,187 +308,20 @@ class Mapper(QtGui.QMainWindow):
 		# draw "_center_" position
 		self.addPoint(Point("_center_", lat, lon, 'red'))
 		
-		print len(self.tracks)
-		
 		track = Track("prova")
 		track.addPoint(Point("one", 42.355900, 10.930400, "red"))
 		track.addPoint(Point("two", 42.355800, 10.930700, "red"))
 		track.addPoint(Point("three", 42.355600, 10.920400, "red"))
 		self.addTrack(track)
 		
-		print len(self.tracks)
-		
-		self.drawMapOnCanvas()
-		self.updatePointsList()
-	
-	def center(self):
-		self.ui.graphicsView.centerOn(QPointF(self.mapCenterX, self.mapCenterY))
-		print "centering on %i x %i"%(self.mapCenterX, self.mapCenterY)
-	
-	def centerCoords(self, lat, lon):
-		dotX, dotY = self.gpsToXY(lat, lon)
-		self.ui.graphicsView.centerOn(QPointF(dotX, dotY))
+		self.refresh()
 
-	def centerOnSelectedPoint(self):
-		currentSelectedPoint = self.ui.pointsList.currentItem()
-		
-		if (currentSelectedPoint):
-			if (currentSelectedPoint.childCount() == 0):
-				pointLat = float(currentSelectedPoint.text(1))		
-				pointLon = float(currentSelectedPoint.text(2))		
-				
-				self.centerCoords(pointLat, pointLon)
-			
-	def deleteSelectedPoint(self):
-		currentSelectedPoint = self.ui.pointsList.currentItem()
-		if (currentSelectedPoint):
-			pointID = currentSelectedPoint.text(0)
-			
-			remainingPoints = []
-			for point in self.points:
-				if (point.name() != pointID):
-					remainingPoints.append(point)
-			
-			self.points = remainingPoints
-			
-			self.drawMapOnCanvas()
-			self.updatePointsList()
-			
-
-	def clear(self):
-		
-		#print "Clearing drawings over image..."
-		del self.completeMap
-		del self.draw
-		self.completeMap = self.backupMap.copy()
-		self.draw = ImageDraw.Draw(self.completeMap)	
-	
-	def recreateDrawings(self):
-		
-		self.clear()
-		
-		for point in self.points:
-		
-			if (point.visible() == False): continue
-		
-			dotX, dotY = self.gpsToXY(point.lat(), point.lon())
-			rectWidth = 3
-			
-			self.draw.ellipse(
-				[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
-				fill=point.color()
-			)
-
-		for track in self.tracks:
-		
-			if (track.visible() == False): continue
-		
-			coordVector = []
-			
-			for point in track.points():
-				
-				if (point.visible() == False): continue
-			
-				dotX, dotY = self.gpsToXY(point.lat(), point.lon())
-				rectWidth = 3
-				
-				self.draw.ellipse(
-					[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
-					fill=point.color()
-				)
-				
-				coordVector.append(dotX)
-				coordVector.append(dotY)
-			
-			self.draw.line(coordVector, fill="black")
-
-
-		# draw image geometrical center
-		# self.draw.ellipse([self.imgWidth/2-3, self.imgHeight/2-3, self.imgWidth/2+3, self.imgHeight/2+3], fill="green")
-
-	def updatePointsList(self):
-	
-		self.ui.pointsList.clear()
-		
-		first = True
-		firstElement = None
-
-		for point in self.points:
-		
- 			newElement = QtGui.QTreeWidgetItem(None)
-			newElement.setText(0, point.name())
-			newElement.setText(1, "%.8f"%point.lat())
-			newElement.setText(2, "%.8f"%point.lon())
-			
-			if (point.visible()):
-				newElement.setCheckState(3, Qt.Checked)
-			else:
-				newElement.setCheckState(3, Qt.Unchecked)
-			
-			self.ui.pointsList.addTopLevelItem(newElement)
-			
-			if (first == True):	
-				firstElement = newElement
-				first = False
-		
-		for track in self.tracks:
-			
-			trackName = track.name()
-			trackNode = QtGui.QTreeWidgetItem(None)
-			trackNode.setText(0, trackName)
-			
-			if (track.visible() == False):
-				trackNode.setCheckState(3, Qt.Unchecked)
-			else:
-				trackNode.setCheckState(3, Qt.Checked)
-			
-			self.ui.pointsList.addTopLevelItem(trackNode)
-			
-			for point in track.points():
-			
-				newElement = QtGui.QTreeWidgetItem(trackNode)
-				newElement.setText(0, point.name())
-				newElement.setText(1, "%.8f"%point.lat())
-				newElement.setText(2, "%.8f"%point.lon())
-
-				if (point.visible()):
-					newElement.setCheckState(3, Qt.Checked)
-				else:
-					newElement.setCheckState(3, Qt.Unchecked)
-				
-				self.ui.pointsList.addTopLevelItem(newElement)				
-		
-		if (firstElement):
-			self.ui.pointsList.setCurrentItem(firstElement)	
-	
-	
-	
-	
-		
-			
-	
-	def drawMapOnCanvas(self):
-	
-		self.recreateDrawings()
-	
-		self.imgQ = ImageQt.ImageQt(self.completeMap)  # we need to hold reference to imgQ, or it will crash
-		pixMap = QtGui.QPixmap.fromImage(self.imgQ)
-		#pixMap = pixMap.scaled(100, 100, QtCore.Qt.KeepAspectRatio)
-	
-		#self.scene = QtGui.QGraphicsScene()
-		self.scene = QScene(self)
-		#self.scene.addPixmap( QtGui.QPixmap(ImageQt.ImageQt(self.completeMap)) )
-		self.scene.addPixmap( pixMap )
-		self.ui.graphicsView.setScene(self.scene)
-
-	
 	def createMap(self, lat, lon, zoom):
 		x, y = self.deg2num(lat, lon, zoom)
 		self.createMapXY(x, y, zoom)
 		self.mapCenterX, self.mapCenterY = self.gpsToXY(lat, lon)
 	
 	def createMapXY(self, x, y, zoom):
-		
 		# salvataggio parametri mappa
 		self.upperLeftX = int(x-1)
 		self.upperLeftY = int(y-1)
@@ -646,7 +378,256 @@ class Mapper(QtGui.QMainWindow):
 		if (self.mapWidthMeters != 0):
 			self.pixelsPerMeter = float(self.imgWidth) / float(self.mapWidthMeters)
 			self.ui.map_resolution.setText("%.2f m/px"%(1.0 / self.pixelsPerMeter))
+
+	def recreateDrawings(self):
+		self.clear()
 		
+		for point in self.points:
+		
+			if (point.visible() == False): continue
+		
+			dotX, dotY = self.gpsToXY(point.lat(), point.lon())
+			rectWidth = 3
+			
+			self.draw.ellipse(
+				[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
+				fill=point.color()
+			)
+
+		for track in self.tracks:
+		
+			if (track.visible() == False): continue
+		
+			coordVector = []
+			
+			for point in track.points():
+				
+				if (point.visible() == False): continue
+			
+				dotX, dotY = self.gpsToXY(point.lat(), point.lon())
+				rectWidth = 3
+				
+				self.draw.ellipse(
+					[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
+					fill=point.color()
+				)
+				
+				coordVector.append(dotX)
+				coordVector.append(dotY)
+			
+			self.draw.line(coordVector, fill="black")
+
+		# draw image geometrical center
+		# self.draw.ellipse([self.imgWidth/2-3, self.imgHeight/2-3, self.imgWidth/2+3, self.imgHeight/2+3], fill="green")
+
+	def drawMapOnCanvas(self):	
+		self.imgQ = ImageQt.ImageQt(self.completeMap)  # we need to hold reference to imgQ, or it will crash
+		pixMap = QtGui.QPixmap.fromImage(self.imgQ)
+		#pixMap = pixMap.scaled(100, 100, QtCore.Qt.KeepAspectRatio)
+	
+		#self.scene = QtGui.QGraphicsScene()
+		self.scene = QScene(self)
+		#self.scene.addPixmap( QtGui.QPixmap(ImageQt.ImageQt(self.completeMap)) )
+		self.scene.addPixmap( pixMap )
+		self.ui.graphicsView.setScene(self.scene)
+
+	def refresh(self):
+		# recovers original downloaded map (built from OSM tiles)
+		# and on it recreates points and tracks
+		self.recreateDrawings()
+		
+		# draws map+points+tracks on canvas
+		self.drawMapOnCanvas()
+		
+		# updates points listing
+		self.updatePointsList()
+
+	def itemChangedOnPointsList(self, item, column):
+		# checks just status of column 3 (visible flag)
+		if (column != 3): return
+		if (item):
+			nodeName = item.text(0)
+			
+			# not a track
+			if (item.childCount() == 0): 
+			
+				# a point belonging to a track
+				if (item.parent()):
+				
+					trackItem = item.parent()
+					trackName = trackItem.text(0)
+					
+					track = self.getTrackByID(trackName)
+					
+					if (track):
+						
+						point = track.getPointByID(nodeName)
+						
+						if (point):
+							
+							actualState = point.visible()
+							newState = item.checkState(3)
+							if (newState == Qt.Checked):
+								newState = True
+							else:
+								newState = False
+							
+							if (newState != actualState):
+								point.setVisible(newState)
+								self.refresh()
+					
+				# a point not belonging to a track
+				else:
+					point = self.getPointByID(nodeName)
+					
+					if (point):
+						
+						actualState = point.visible()
+						newState = item.checkState(3)
+						if (newState == Qt.Checked):
+							newState = True
+						else:
+							newState = False
+						
+						if (newState != actualState):
+							point.setVisible(newState)
+							self.refresh()
+			
+			# a track
+			else:	
+				track = self.getTrackByID(nodeName)
+				
+				if (track):
+
+						actualState = track.visible()
+						newState = item.checkState(3)
+						if (newState == Qt.Checked):
+							newState = True
+						else:
+							newState = False
+						
+						if (newState != actualState):
+							track.setVisible(newState)
+							self.refresh()				
+	
+	def zoomDown(self):
+		if (self.ui.mapZoom.value() < 17):
+			self.ui.mapZoom.setValue(self.ui.mapZoom.value()+1)
+			self.createMapButton()
+	def zoomUp(self):
+		if (self.ui.mapZoom.value() > 1):
+			self.ui.mapZoom.setValue(self.ui.mapZoom.value()-1)
+			self.createMapButton()
+	
+	# performed when a point is doubleclicked in the map
+	# sets the point coordinates in the upper right fields in the ui, 
+	# and rebuilds the map
+	def doubleClickOnGraphics(self, event):
+		
+		newX = event.scenePos().x()
+		newY = event.scenePos().y()
+		lat, lon = self.xyToGps(newX, newY)
+		
+		self.ui.mapLat.setValue(lat)
+		self.ui.mapLon.setValue(lon)
+		self.createMapButton()
+		
+		self.center()
+	
+	
+	def center(self):
+		self.ui.graphicsView.centerOn(QPointF(self.mapCenterX, self.mapCenterY))
+		print "centering on %i x %i"%(self.mapCenterX, self.mapCenterY)
+	
+	def centerCoords(self, lat, lon):
+		dotX, dotY = self.gpsToXY(lat, lon)
+		self.ui.graphicsView.centerOn(QPointF(dotX, dotY))
+
+	def centerOnSelectedPoint(self):
+		currentSelectedPoint = self.ui.pointsList.currentItem()
+		
+		if (currentSelectedPoint):
+			if (currentSelectedPoint.childCount() == 0):
+				pointLat = float(currentSelectedPoint.text(1))		
+				pointLon = float(currentSelectedPoint.text(2))		
+				
+				self.centerCoords(pointLat, pointLon)
+			
+	def deleteSelectedPoint(self):
+		currentSelectedPoint = self.ui.pointsList.currentItem()
+		if (currentSelectedPoint):
+			pointID = currentSelectedPoint.text(0)
+			
+			remainingPoints = []
+			for point in self.points:
+				if (point.name() != pointID):
+					remainingPoints.append(point)
+			
+			self.points = remainingPoints
+			
+			self.refresh()		
+
+	def clear(self):		
+		#print "Clearing drawings over image..."
+		del self.completeMap
+		del self.draw
+		self.completeMap = self.backupMap.copy()
+		self.draw = ImageDraw.Draw(self.completeMap)	
+	
+	def updatePointsList(self):	
+		self.ui.pointsList.clear()
+		
+		first = True
+		firstElement = None
+
+		for point in self.points:
+		
+ 			newElement = QtGui.QTreeWidgetItem(None)
+			newElement.setText(0, point.name())
+			newElement.setText(1, "%.8f"%point.lat())
+			newElement.setText(2, "%.8f"%point.lon())
+			
+			if (point.visible()):
+				newElement.setCheckState(3, Qt.Checked)
+			else:
+				newElement.setCheckState(3, Qt.Unchecked)
+			
+			self.ui.pointsList.addTopLevelItem(newElement)
+			
+			if (first == True):	
+				firstElement = newElement
+				first = False
+		
+		for track in self.tracks:
+			
+			trackName = track.name()
+			trackNode = QtGui.QTreeWidgetItem(None)
+			trackNode.setText(0, trackName)
+			
+			if (track.visible() == False):
+				trackNode.setCheckState(3, Qt.Unchecked)
+			else:
+				trackNode.setCheckState(3, Qt.Checked)
+			
+			self.ui.pointsList.addTopLevelItem(trackNode)
+			
+			for point in track.points():
+			
+				newElement = QtGui.QTreeWidgetItem(trackNode)
+				newElement.setText(0, point.name())
+				newElement.setText(1, "%.8f"%point.lat())
+				newElement.setText(2, "%.8f"%point.lon())
+
+				if (point.visible()):
+					newElement.setCheckState(3, Qt.Checked)
+				else:
+					newElement.setCheckState(3, Qt.Unchecked)
+				
+				self.ui.pointsList.addTopLevelItem(newElement)				
+		
+		if (firstElement):
+			self.ui.pointsList.setCurrentItem(firstElement)	
+	
 
 	def openNewPointWindow(self):
 		self.newPointWindow = NewPointDialog(self)
@@ -665,7 +646,6 @@ class Mapper(QtGui.QMainWindow):
 			self.tracks.append(track)
 	
 	def deletePointByID(self, id):
-		
 		survivingPoints = []
 		
 		for point in self.points:
@@ -674,16 +654,14 @@ class Mapper(QtGui.QMainWindow):
 
 		self.points = survivingPoints
 	
-	def getTrackByID(self, id):
-		
+	def getTrackByID(self, id):	
 		for track in self.tracks:
 			if (track.name() == id):
 				return track
 		
 		return None
 
-	def getPointByID(self, id):
-		
+	def getPointByID(self, id):	
 		for point in self.points:
 			if (point.name() == id):
 				return point
