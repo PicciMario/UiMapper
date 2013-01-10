@@ -18,17 +18,52 @@ from PIL import ImageQt
 
 from mainUI import Ui_MainWindow
 from newPointDialog import Ui_NewPointDialog
+from newTrackDialog import Ui_NewTrackDialog
 
+class NewTrackDialog(QtGui.QDialog):
 
-class NewPointDialog(QtGui.QDialog):
-	
 	parent = None
 	
 	def __init__(self, parent=None):
 		QtGui.QDialog.__init__(self, parent)
+		self.ui = Ui_NewTrackDialog()
+		self.ui.setupUi(self)
+		self.parent = parent
+		
+		QtCore.QObject.connect(self.ui.button_add, QtCore.SIGNAL("clicked()"), self.addButtonClicked)
+		QtCore.QObject.connect(self.ui.button_cancel, QtCore.SIGNAL("clicked()"), self.cancel)
+
+
+	def addButtonClicked(self):
+		newTrackName = self.ui.trackName.text()
+
+		if (len(newTrackName) == 0):
+			QMessageBox.warning(self, "Error", "Point name field must not be empty")
+			return		
+		
+		result = self.parent.addTrack(Track(newTrackName))
+		
+		if (result != 0):
+			QMessageBox.warning(self, "Error", "Error while adding new track (maybe duplicate name?).")
+			return	
+			
+		self.parent.refresh()
+		self.close()
+		
+	def cancel(self):
+
+		self.close()
+		
+class NewPointDialog(QtGui.QDialog):
+	
+	parent = None
+	
+	def __init__(self, parent=None, track = None):
+		QtGui.QDialog.__init__(self, parent)
 		self.ui = Ui_NewPointDialog()
 		self.ui.setupUi(self)
 		self.parent = parent
+		self.track = track
 		
 		QtCore.QObject.connect(self.ui.button_add, QtCore.SIGNAL("clicked()"), self.addButtonClicked)
 		QtCore.QObject.connect(self.ui.button_cancel, QtCore.SIGNAL("clicked()"), self.cancel)
@@ -43,9 +78,16 @@ class NewPointDialog(QtGui.QDialog):
 			QMessageBox.warning(self, "Error", "Point name field must not be empty")
 			return
 		
-		self.parent.addPoint(Point(newPointName, newPointLat, newPointLon, newPointColor))
-		self.parent.drawMapOnCanvas()
-		self.parent.updatePointsList()
+		if (self.track):
+			result = self.track.addPoint(Point(newPointName, newPointLat, newPointLon, newPointColor))
+		else:
+			result = self.parent.addPoint(Point(newPointName, newPointLat, newPointLon, newPointColor))
+		
+		if (result != 0):
+			QMessageBox.warning(self, "Error", "Error while adding new point (maybe duplicate name?).")
+			return			
+		
+		self.parent.refresh()
 		
 		self.close()
 	
@@ -77,9 +119,10 @@ class Track():
 	
 	def addPoint(self, point):
 		if (self.getPointByID(point.name())):
-			print "Point name already in use"
+			return 1
 		else:
 			self.__pointsList.append(point)
+			return 0
 	
 	def points(self):
 		return self.__pointsList
@@ -102,6 +145,14 @@ class Track():
 			if (point.name() == id):
 				return point
 		return None
+	
+	def deletePointByID(self, pointID):
+		remainingPoints = []
+		for point in self.__pointsList:
+			if (point.name() != pointID):
+				remainingPoints.append(point)
+		
+		self.__pointsList = remainingPoints
 	
 	def visible(self):
 		return self.__visible
@@ -278,6 +329,7 @@ class Mapper(QtGui.QMainWindow):
 		# manage points list
 		QtCore.QObject.connect(self.ui.button_delete_point, QtCore.SIGNAL("clicked()"), self.deleteSelectedPoint)
 		QtCore.QObject.connect(self.ui.button_new_point, QtCore.SIGNAL("clicked()"), self.openNewPointWindow)
+		QtCore.QObject.connect(self.ui.button_new_track, QtCore.SIGNAL("clicked()"), self.openNewTrackWindow)
 		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemSelectionChanged()"), self.centerOnSelectedPoint)	
 		QtCore.QObject.connect(self.ui.pointsList, QtCore.SIGNAL("itemClicked(QTreeWidgetItem*,int)"), self.itemChangedOnPointsList)	
 
@@ -548,24 +600,52 @@ class Mapper(QtGui.QMainWindow):
 		
 		if (currentSelectedPoint):
 			if (currentSelectedPoint.childCount() == 0):
-				pointLat = float(currentSelectedPoint.text(1))		
-				pointLon = float(currentSelectedPoint.text(2))		
-				
-				self.centerCoords(pointLat, pointLon)
+				try:
+					pointLat = float(currentSelectedPoint.text(1))		
+					pointLon = float(currentSelectedPoint.text(2))		
+					
+					self.centerCoords(pointLat, pointLon)
+				except:
+					pass
 			
 	def deleteSelectedPoint(self):
 		currentSelectedPoint = self.ui.pointsList.currentItem()
 		if (currentSelectedPoint):
-			pointID = currentSelectedPoint.text(0)
+		
+			# a point
+			if (currentSelectedPoint.childCount() == 0 and currentSelectedPoint.text(1) != None):
+				
+				pointID = currentSelectedPoint.text(0)
+				
+				# a point in a track
+				if (currentSelectedPoint.parent()):				
+					track = self.getTrackByID(currentSelectedPoint.parent().text(0))
+					if (track):	
+						track.deletePointByID(pointID)						
+				
+				# a root point
+				else:		
+					remainingPoints = []
+					for point in self.points:
+						if (point.name() != pointID):
+							remainingPoints.append(point)
+					
+					self.points = remainingPoints
 			
-			remainingPoints = []
-			for point in self.points:
-				if (point.name() != pointID):
-					remainingPoints.append(point)
+				self.refresh()		
 			
-			self.points = remainingPoints
+			# maybe a track?
+			else:
+				trackID = currentSelectedPoint.text(0)
+				
+				remainingTracks = []
+				for track in self.tracks:
+					if (track.name() != trackID):
+						remainingTracks.append(track)
+				
+				self.tracks = remainingTracks
 			
-			self.refresh()		
+				self.refresh()					
 
 	def clear(self):		
 		#print "Clearing drawings over image..."
@@ -630,20 +710,38 @@ class Mapper(QtGui.QMainWindow):
 	
 
 	def openNewPointWindow(self):
-		self.newPointWindow = NewPointDialog(self)
+	
+		track = None
+
+		# if a track is currently selected, add it the new point
+		currentSelectedPoint = self.ui.pointsList.currentItem()
+		
+		if (currentSelectedPoint):
+			# a point (not a track)
+			if (currentSelectedPoint.childCount() > 0 or currentSelectedPoint.text(1) != None):				
+				track = self.getTrackByID(currentSelectedPoint.text(0))
+
+		self.newPointWindow = NewPointDialog(self, track)
+		
 		self.newPointWindow.exec_()
+
+	def openNewTrackWindow(self):
+		self.newTrackWindow = NewTrackDialog(self)
+		self.newTrackWindow.exec_()
 
 	def addPoint(self, point):
 		if (self.getPointByID(point.name())):
-			print "Point name already in use"
+			return 1
 		else:
 			self.points.append(point)
+			return 0
 
 	def addTrack(self, track):
 		if (self.getTrackByID(track.name())):
-			print "Track name already in use"
+			return 1
 		else:
 			self.tracks.append(track)
+			return 0
 	
 	def deletePointByID(self, id):
 		survivingPoints = []
