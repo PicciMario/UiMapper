@@ -234,6 +234,8 @@ class Mapper(QtGui.QMainWindow):
 	# points database
 	points = []
 	tracks = []
+	
+	selectionRect = None
 
 	# Converts a gps coordinate couple into the xy coordinate of
 	# the OSM tile it is on.
@@ -594,6 +596,14 @@ class Mapper(QtGui.QMainWindow):
 	def centerCoords(self, lat, lon):
 		dotX, dotY = self.gpsToXY(lat, lon)
 		self.ui.graphicsView.centerOn(QPointF(dotX, dotY))
+		
+		try:
+			if (self.selectionRect):
+				self.scene.removeItem(self.selectionRect)
+		except:
+			print "Unexpected error:", sys.exc_info()
+	
+		self.selectionRect = self.scene.addRect(dotX-5, dotY-5, 10, 10)
 
 	def centerOnSelectedPoint(self):
 		currentSelectedPoint = self.ui.pointsList.currentItem()
