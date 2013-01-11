@@ -46,7 +46,8 @@ class NewTrackDialog(QtGui.QDialog):
 		if (result != 0):
 			QMessageBox.warning(self, "Error", "Error while adding new track (maybe duplicate name?).")
 			return	
-			
+		
+		self.parent.updatePointsList()
 		self.parent.refresh()
 		self.close()
 		
@@ -87,6 +88,7 @@ class NewPointDialog(QtGui.QDialog):
 			QMessageBox.warning(self, "Error", "Error while adding new point (maybe duplicate name?).")
 			return			
 		
+		self.parent.updatePointsList()
 		self.parent.refresh()
 		
 		self.close()
@@ -349,6 +351,7 @@ class Mapper(QtGui.QMainWindow):
 		# triggers first map redraw (with default 
 		# position and zoom, as set by UI)
 		self.createMapButton()
+		self.updatePointsList()
 
 	def createMapButton(self):		
 		lat = self.ui.mapLat.value()
@@ -447,7 +450,7 @@ class Mapper(QtGui.QMainWindow):
 				[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
 				fill=point.color()
 			)
-
+	
 		for track in self.tracks:
 		
 			if (track.visible() == False): continue
@@ -494,7 +497,7 @@ class Mapper(QtGui.QMainWindow):
 		self.drawMapOnCanvas()
 		
 		# updates points listing
-		self.updatePointsList()
+		#self.updatePointsList()
 
 	def itemChangedOnPointsList(self, item, column):
 		# checks just status of column 3 (visible flag)
@@ -601,7 +604,7 @@ class Mapper(QtGui.QMainWindow):
 			if (self.selectionRect):
 				self.scene.removeItem(self.selectionRect)
 		except:
-			print "Unexpected error:", sys.exc_info()
+			pass
 	
 		self.selectionRect = self.scene.addRect(dotX-5, dotY-5, 10, 10)
 
@@ -642,7 +645,8 @@ class Mapper(QtGui.QMainWindow):
 					
 					self.points = remainingPoints
 			
-				self.refresh()		
+				self.updatePointsList()
+				self.refresh()
 			
 			# maybe a track?
 			else:
@@ -655,6 +659,7 @@ class Mapper(QtGui.QMainWindow):
 				
 				self.tracks = remainingTracks
 			
+				self.updatePointsList()
 				self.refresh()					
 
 	def clear(self):		
