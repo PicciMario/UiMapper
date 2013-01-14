@@ -652,9 +652,13 @@ class Mapper(QtGui.QMainWindow):
 			if (currentSelectedPoint.childCount() == 0):
 				try:
 					pointLat = float(currentSelectedPoint.text(1))		
-					pointLon = float(currentSelectedPoint.text(2))		
-					
-					self.centerCoords(pointLat, pointLon)
+					pointLon = float(currentSelectedPoint.text(2))	
+
+					dotX, dotY = self.gpsToXY(pointLat, pointLon)
+					if (dotX >= 4*256 or dotX <= 0 or dotY >= 3*256 or dotY <= 0): 
+						pass
+					else:
+						self.centerCoords(pointLat, pointLon)
 				except:
 					pass
 			
