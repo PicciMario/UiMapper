@@ -237,7 +237,11 @@ class Mapper(QtGui.QMainWindow):
 	points = []
 	tracks = []
 	
+	pointsListValid = True
+	
 	selectionRect = None
+	selectionLine = None
+	selectionText = None
 
 	# Converts a gps coordinate couple into the xy coordinate of
 	# the OSM tile it is on.
@@ -365,11 +369,11 @@ class Mapper(QtGui.QMainWindow):
 		# draw "_center_" position
 		self.addPoint(Point("_center_", lat, lon, 'red'))
 		
-		track = Track("prova")
-		track.addPoint(Point("one", 42.355900, 10.930400, "red"))
-		track.addPoint(Point("two", 42.355800, 10.930700, "red"))
-		track.addPoint(Point("three", 42.355600, 10.920400, "red"))
-		self.addTrack(track)
+		#track = Track("prova")
+		#track.addPoint(Point("one", 42.355900, 10.930400, "red"))
+		#track.addPoint(Point("two", 42.355800, 10.930700, "red"))
+		#track.addPoint(Point("three", 42.355600, 10.920400, "red"))
+		#self.addTrack(track)
 		
 		self.refresh()
 
@@ -439,40 +443,54 @@ class Mapper(QtGui.QMainWindow):
 	def recreateDrawings(self):
 		self.clear()
 		
+		rectWidth = 2
+		pen = QPen(QtCore.Qt.red, 2, QtCore.Qt.SolidLine)
+		
 		for point in self.points:
 		
 			if (point.visible() == False): continue
 		
 			dotX, dotY = self.gpsToXY(point.lat(), point.lon())
-			rectWidth = 3
 			
-			self.draw.ellipse(
-				[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
-				fill=point.color()
-			)
+			if (dotX >= 4*256 or dotX <= 0 or dotY >= 3*256 or dotY <= 0): continue;
+			
+			#self.draw.ellipse(
+			#	[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
+			#	fill=point.color()
+			#)
+			
+			ellipse = self.scene.addEllipse(dotX-rectWidth, dotY-rectWidth, 2*rectWidth, 2*rectWidth, pen)
+			ellipse.setToolTip("%s\n%f - %f"%(point.name(), point.lat(), point.lon()))
 	
 		for track in self.tracks:
 		
 			if (track.visible() == False): continue
 		
-			coordVector = []
+			prevX = -1
+			prevY = -1
 			
 			for point in track.points():
 				
 				if (point.visible() == False): continue
 			
 				dotX, dotY = self.gpsToXY(point.lat(), point.lon())
-				rectWidth = 3
 				
-				self.draw.ellipse(
-					[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
-					fill=point.color()
-				)
+				if (dotX >= 4*256 or dotX <= 0 or dotY >= 3*256 or dotY <= 0): continue;
 				
-				coordVector.append(dotX)
-				coordVector.append(dotY)
-			
-			self.draw.line(coordVector, fill="black")
+				#self.draw.ellipse(
+				#	[dotX-rectWidth, dotY-rectWidth, dotX+rectWidth, dotY+rectWidth], 
+				#	fill=point.color()
+				#)
+				
+				ellipse = self.scene.addEllipse(dotX-rectWidth, dotY-rectWidth, 2*rectWidth, 2*rectWidth, pen)
+				ellipse.setToolTip("Track: %s\nPoint: %s\nLat: %f - Lon: %f"%(track.name(), point.name(), point.lat(), point.lon()))
+				
+				if (prevX != -1 and prevY != -1):
+					self.scene.addLine(prevX, prevY, dotX, dotY)
+				
+				prevX = dotX
+				prevY = dotY
+				
 
 		# draw image geometrical center
 		# self.draw.ellipse([self.imgWidth/2-3, self.imgHeight/2-3, self.imgWidth/2+3, self.imgHeight/2+3], fill="green")
@@ -482,22 +500,23 @@ class Mapper(QtGui.QMainWindow):
 		pixMap = QtGui.QPixmap.fromImage(self.imgQ)
 		#pixMap = pixMap.scaled(100, 100, QtCore.Qt.KeepAspectRatio)
 	
-		#self.scene = QtGui.QGraphicsScene()
 		self.scene = QScene(self)
-		#self.scene.addPixmap( QtGui.QPixmap(ImageQt.ImageQt(self.completeMap)) )
 		self.scene.addPixmap( pixMap )
 		self.ui.graphicsView.setScene(self.scene)
 
 	def refresh(self):
-		# recovers original downloaded map (built from OSM tiles)
-		# and on it recreates points and tracks
+	
+		# creates a scene with the downloaded map
+		# and draws it on the UI
+		self.drawMapOnCanvas()
+	
+		# recreates points and tracks on the scene
 		self.recreateDrawings()
 		
-		# draws map+points+tracks on canvas
-		self.drawMapOnCanvas()
-		
-		# updates points listing
-		#self.updatePointsList()
+		# ir required updates points listing
+		if (self.pointsListValid == False):
+			self.updatePointsList()
+			self.pointsListValid = True
 
 	def itemChangedOnPointsList(self, item, column):
 		# checks just status of column 3 (visible flag)
@@ -531,6 +550,7 @@ class Mapper(QtGui.QMainWindow):
 							
 							if (newState != actualState):
 								point.setVisible(newState)
+								self.pointsListValid = False
 								self.refresh()
 					
 				# a point not belonging to a track
@@ -548,6 +568,7 @@ class Mapper(QtGui.QMainWindow):
 						
 						if (newState != actualState):
 							point.setVisible(newState)
+							self.pointsListValid = False
 							self.refresh()
 			
 			# a track
@@ -565,6 +586,7 @@ class Mapper(QtGui.QMainWindow):
 						
 						if (newState != actualState):
 							track.setVisible(newState)
+							self.pointsListValid = False
 							self.refresh()				
 	
 	def zoomDown(self):
@@ -591,7 +613,6 @@ class Mapper(QtGui.QMainWindow):
 		
 		self.center()
 	
-	
 	def center(self):
 		self.ui.graphicsView.centerOn(QPointF(self.mapCenterX, self.mapCenterY))
 		print "centering on %i x %i"%(self.mapCenterX, self.mapCenterY)
@@ -605,8 +626,24 @@ class Mapper(QtGui.QMainWindow):
 				self.scene.removeItem(self.selectionRect)
 		except:
 			pass
+
+		try:
+			if (self.selectionLine):
+				self.scene.removeItem(self.selectionLine)
+		except:
+			pass
+
+		try:
+			if (self.selectionText):
+				self.scene.removeItem(self.selectionText)
+		except:
+			pass
 	
-		self.selectionRect = self.scene.addRect(dotX-5, dotY-5, 10, 10)
+		pen = QPen(QtCore.Qt.black, 2, QtCore.Qt.SolidLine)
+		self.selectionRect = self.scene.addRect(dotX-7, dotY-7, 14, 14, pen)
+		self.selectionLine = self.scene.addLine(dotX+7, dotY-7, dotX+5+20, dotY-5-20, pen)
+		self.selectionText = self.scene.addSimpleText("%.5f, %.5f"%(lat, lon))
+		self.selectionText.setPos(dotX+5+24, dotY-5-20-10)
 
 	def centerOnSelectedPoint(self):
 		currentSelectedPoint = self.ui.pointsList.currentItem()
@@ -645,7 +682,7 @@ class Mapper(QtGui.QMainWindow):
 					
 					self.points = remainingPoints
 			
-				self.updatePointsList()
+				self.pointsListValid = False
 				self.refresh()
 			
 			# maybe a track?
@@ -659,7 +696,7 @@ class Mapper(QtGui.QMainWindow):
 				
 				self.tracks = remainingTracks
 			
-				self.updatePointsList()
+				self.pointsListValid = False
 				self.refresh()					
 
 	def clear(self):		
@@ -705,6 +742,7 @@ class Mapper(QtGui.QMainWindow):
 				trackNode.setCheckState(3, Qt.Checked)
 			
 			self.ui.pointsList.addTopLevelItem(trackNode)
+			trackNode.setToolTip(0, "Points in track: %i"%len(track.points()))
 			
 			for point in track.points():
 			
@@ -749,6 +787,7 @@ class Mapper(QtGui.QMainWindow):
 			return 1
 		else:
 			self.points.append(point)
+			self.pointsListValid = False
 			return 0
 
 	def addTrack(self, track):
@@ -756,6 +795,7 @@ class Mapper(QtGui.QMainWindow):
 			return 1
 		else:
 			self.tracks.append(track)
+			self.pointsListValid = False
 			return 0
 	
 	def deletePointByID(self, id):
@@ -766,6 +806,7 @@ class Mapper(QtGui.QMainWindow):
 				survivingPoints.append(point)
 
 		self.points = survivingPoints
+		self.pointsListValid = False
 	
 	def getTrackByID(self, id):	
 		for track in self.tracks:
