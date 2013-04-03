@@ -164,7 +164,21 @@ class Track():
 			self.__visible = True
 		else:
 			self.__visible = False
+	
+	def getCenter(self):
+		num = 0
+		avgLat = 0
+		avgLon = 0
 
+		for point in self.__pointsList:
+			num += 1
+			avgLat += point.lat()
+			avgLon += point.lon()
+		
+		avgLat = float(avgLat) / float(num)
+		avgLon = float(avgLon) / float(num)
+
+		return avgLat, avgLon
 
 class Point():
 
@@ -322,13 +336,20 @@ class Mapper(QtGui.QMainWindow):
 		return PIL.Image.open(imRead)
 		
 
-	def __init__(self, parent=None):
+	def __init__(self, parent=None, zoom=None, lat=None, lon=None):
 		QtGui.QMainWindow.__init__(self, parent)
 		self.ui = Ui_MainWindow()
 		self.ui.setupUi(self)
 		
 		self.points = []
-		self.tracks = []		
+		self.tracks = []
+
+		if (zoom):
+			self.ui.mapZoom.setValue(zoom)
+		if (lat):
+			self.ui.mapLat.setValue(lat)
+		if (lon):
+			self.ui.mapLon.setValue(lon)
 		
 		# managing upper right UI section (map initialization parameters)
 		QtCore.QObject.connect(self.ui.button_rebuild, QtCore.SIGNAL("clicked()"), self.createMapButton)
