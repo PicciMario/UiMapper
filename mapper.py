@@ -333,6 +333,7 @@ class Mapper(QtGui.QMainWindow):
 		# managing upper right UI section (map initialization parameters)
 		QtCore.QObject.connect(self.ui.button_rebuild, QtCore.SIGNAL("clicked()"), self.createMapButton)
 		QtCore.QObject.connect(self.ui.button_center, QtCore.SIGNAL("clicked()"), self.center)
+		QtCore.QObject.connect(self.ui.saveFileButton, QtCore.SIGNAL("clicked()"), self.saveToFile)
 		
 		# manage points list
 		QtCore.QObject.connect(self.ui.button_delete_point, QtCore.SIGNAL("clicked()"), self.deleteSelectedPoint)
@@ -408,10 +409,21 @@ class Mapper(QtGui.QMainWindow):
 		# recupero tiles da openstreetmap
 		self.ui.statusbar.showMessage("Downloading tiles from OpenStreetMap.org...")
 		
+		progress = QProgressDialog("Downloading tiles from OpenStreetMap.org...", "Abort", 0, 12, self)
+		progress.setWindowModality(Qt.WindowModal)
+		progress.setMinimumDuration = 0
+		
+		i = 0
 		tiles = []
 		for deltaX in range(-1,3):
 			for deltaY in range(-1,2):
+			
+				progress.setValue(i)
+			
 				tiles.append(self.getTileXY(x+deltaX, y+deltaY, zoom))
+				i = i + 1
+		
+		progress.setValue(12);
 		
 		self.ui.statusbar.showMessage("Tiles downloaded from OpenStreetMap.org")
 		
@@ -709,6 +721,25 @@ class Mapper(QtGui.QMainWindow):
 		del self.draw
 		self.completeMap = self.backupMap.copy()
 		self.draw = ImageDraw.Draw(self.completeMap)	
+	
+	def saveToFile(self, filename = None):
+		if (filename == None):
+			filename = QtGui.QFileDialog.getSaveFileName(None, "Nome immagine", "", "Image Files (*.png)")
+			filename = filename[0]
+
+		if (len(filename) == 0):
+			return
+		
+		outputimg = QtGui.QPixmap(self.ui.graphicsView.viewport().width(), self.ui.graphicsView.viewport().height())
+		painter = QtGui.QPainter(outputimg)
+		
+		targetrect = sourcerect = self.ui.graphicsView.viewport().rect()
+		
+		self.ui.graphicsView.render(painter, targetrect, sourcerect)
+		outputimg.save(filename, "PNG")
+
+		painter.end()	
+	
 	
 	def updatePointsList(self):	
 		self.ui.pointsList.clear()

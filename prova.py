@@ -8,19 +8,28 @@ con = sqlite3.connect('nmeadata.sqlite')
 con.row_factory = sqlite3.Row
 cur = con.cursor()
 
-cur.execute('SELECT time, latitude, longitude FROM nmeadata WHERE time > 1326474000 AND time < 1326495540')
+#cur.execute('SELECT time, latitude, longitude FROM nmeadata WHERE time > 1326474000 AND time < 1326495540')
+cur.execute('SELECT time, latitude, longitude FROM nmeadata ORDER BY time')
 
-traccia = mapper.Track("Concordia")
+elements = cur.fetchall()
+print len(elements)
 
-for element in cur.fetchall():
-	
-	if (element['time'] % 5 != 0): continue
-	
-	pointName = time.strftime('%H:%M:%S', time.localtime(element['time']))
-	
-	traccia.addPoint(mapper.Point(pointName, element['latitude'], element['longitude'], "red"))	
+sectionLength = 10000.0
+sections = int(float(len(elements)) / sectionLength)
 
-finestra.addTrack(traccia)
+for section in range(sections+1):
+	
+	traccia = mapper.Track("Concordia %i"%section)
+
+	for element in elements[int(sectionLength*(section)) : int(sectionLength*(section+1))]:
+		
+		if (element['time'] % 100 != 0): continue
+		
+		pointName = time.strftime('%d %b %y %H:%M:%S', time.localtime(element['time']))
+		
+		traccia.addPoint(mapper.Point(pointName, element['latitude'], element['longitude'], "red"))	
+
+	finestra.addTrack(traccia)
 
 
 finestra.show()
